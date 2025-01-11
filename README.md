@@ -27,15 +27,13 @@
 - **HTTP API 服务**
 
   - 处理所有 REST API 请求
-  - 负责排行榜数据查询，通过 redis 实现
-  - 处理玩家分数更新，接收到请求后，发给 bullMq，通过 bullMq 来实现处理消息
-  - 通过 bullMq 发送消息到 WebSocket 服务，webSocket 服务负责实时推送
+  - 负责排行榜数据查询，通过 Redis 实现
+  - 处理玩家分数更新，将请求转发至消息队列
+  - 消息队列处理核心业务逻辑：数据更新、首次上榜判定、玩家超越统计等，并将广播消息编码后通过 BullMQ 发送至 WebSocket 服务进行推送
 
 - **WebSocket 实时服务**
-  - 维护实时连接池
-  - 处理实时数据推送
-  - 发送排名变化通知
-  - 实现断线重连机制
+  - 维护玩家实时连接
+  - 处理消息队列推送的实时消息
 
 ### 核心组件
 
@@ -50,9 +48,9 @@
   - 异步更新机制
   - WebSocket 实时数据推送
 
-### 权衡
+### 权衡设计
 
-1. 通过消息队列削峰，避免并发处理导致数据库压力过大
+1. 引入消息队列作为削峰方案，有效降低并发压力，保障数据一致性
 
 ### 功能增强
 
@@ -61,25 +59,36 @@
   - 提供更强大的消息持久化能力
   - 提升系统可靠性
 - 消息失败重试机制
-- 请求频率的限制
-- 添加缓存预热机制
-- 添加报错监控，发送消息处理失败信息企业微信等消息平台
-- 通过构建 Gateway 服务，来对 websocket 服务进行负载均衡
+- 请求频率限制
+- 缓存预热机制
+- 错误监控告警（支持企业微信等消息平台）
+- 引入 API Gateway 实现 WebSocket 服务负载均衡
 - PM2 集群部署支持
-- redis 集群部署支持
+- Redis 集群部署支持
+- 消息队列幂等性保障（通过 requestId 防止重复消费）
+- 性能优化：考虑将 Mongoose 数据更新操作迁移至独立微服务，实现异步更新，提升主服务性能
 
-### 部署方式
+### 部署与测试
 
-这两个都是 nestjs 应用
-分别打包，部署都服务器上，然后在服务器上手动创建.env 文件
+- **测试环境**
 
-.env 文件格式
+  - WebSocket 项目：`public` 目录下提供测试客户端页面
+  - RankSystem 项目：`test/rankTest.js` 提供接口测试脚本
 
-```
-MONGOURL='mongodb://xxxx@xxx/gameRank?authSource=admin'
-REDIS_HOST='xxxx'
+- **部署说明**
+  两个项目均基于 NestJS 框架开发，部署步骤：
+
+  1. 分别构建打包
+  2. 部署至服务器
+  3. 配置环境变量（.env 文件）
+
+- **环境变量配置**
+
+```env
+MONGOURL='mongodb://username:password@host/gameRank?authSource=admin'
+REDIS_HOST='host'
 REDIS_PORT='6380'
-REDIS_PASSWORD="xxx"
-REDIS_DB="xxx"
+REDIS_PASSWORD="password"
+REDIS_DB="dbnum"
 PORT=4000
 ```
