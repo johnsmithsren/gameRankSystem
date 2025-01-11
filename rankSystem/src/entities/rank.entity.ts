@@ -8,6 +8,9 @@ export class Rank extends Document {
 
   @Prop({ default: 0 })
   score: number;
+
+  @Prop({ default: "game" })
+  rankType: string;
 }
 
 export const RankSchema = SchemaFactory.createForClass(Rank);

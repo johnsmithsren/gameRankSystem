@@ -1,8 +1,8 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
-import { RedisModule } from '@songkeys/nestjs-redis';
-import { PushModule } from './push/push.module';
+import { Module } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { MongooseModule } from "@nestjs/mongoose";
+import { RedisModule } from "@songkeys/nestjs-redis";
+import { PushModule } from "./push/push.module";
 
 @Module({
   imports: [
@@ -10,23 +10,24 @@ import { PushModule } from './push/push.module';
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({ uri: configService.get('MONGOURL') })
+      useFactory: (configService: ConfigService) => ({
+        uri: configService.get("MONGOURL"),
+      }),
     }),
     RedisModule.forRootAsync({
       inject: [ConfigService],
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         config: {
-          host: configService.get<string>('REDIS_HOST'),
-          port: configService.get<number>('REDIS_PORT'),
-          password: configService.get<string>('REDIS_PASSWORD'),
-          db: configService.get<number>('REDIS_DB'),
+          host: configService.get<string>("REDIS_HOST"),
+          port: configService.get<number>("REDIS_PORT"),
+          password: configService.get<string>("REDIS_PASSWORD"),
+          db: configService.get<number>("REDIS_DB"),
         },
       }),
     }),
     PushModule,
-    ],
+  ],
   controllers: [],
-
 })
-export class AppModule { }
+export class AppModule {}

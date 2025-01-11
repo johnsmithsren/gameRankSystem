@@ -1,57 +1,78 @@
-import { RANK_PROCESS_QUEUE } from "src/utils/constant";
-import { Processor, WorkerHost } from "@nestjs/bullmq";
-import { Job } from "bullmq";
-import { Logger } from "@nestjs/common";
-import { InjectModel } from "@nestjs/mongoose";
-import { InjectRedis } from "@songkeys/nestjs-redis";
-import { Redis } from "ioredis";
-import { Model } from "mongoose";
-import { Rank } from "../entities/rank.entity";
+import { RANK_BROADCAST_QUEUE, RANK_PROCESS_QUEUE } from "src/utils/constant"
+import { InjectQueue, Processor, WorkerHost } from "@nestjs/bullmq"
+import { Job, Queue } from "bullmq"
+import { Logger } from "@nestjs/common"
+import { InjectModel } from "@nestjs/mongoose"
+import { InjectRedis } from "@songkeys/nestjs-redis"
+import { Redis } from "ioredis"
+import { Model } from "mongoose"
+import { Rank } from "../entities/rank.entity"
 
 @Processor(RANK_PROCESS_QUEUE)
 export class RankProcessor extends WorkerHost {
-  private readonly logger = new Logger(RankProcessor.name);
-  private readonly RANK_KEY = "game:rank";
+    private readonly logger = new Logger(RankProcessor.name);
+    private readonly RANK_KEY = "game:rank";
 
-  constructor(
-    @InjectRedis() private readonly redis: Redis,
-    @InjectModel(Rank.name) private readonly rankModel: Model<Rank>
-  ) {
-    super();
-  }
-
-  async process(job: Job<any, any, string>): Promise<any> {
-    try {
-      this.logger.log(`Processing job ${job.name}`);
-
-      switch (job.name) {
-        case "updateScore":
-          await this.handleUpdateScore(job.data);
-          break;
-        default:
-          this.logger.warn(`Unknown job type: ${job.name}`);
-      }
-
-      return {};
-    } catch (error) {
-      this.logger.error(`Job processing failed: ${error.message}`, error.stack);
-      throw error;
+    constructor(
+        @InjectRedis() private readonly redis: Redis,
+        @InjectModel(Rank.name) private readonly rankModel: Model<Rank>,
+        @InjectQueue(RANK_BROADCAST_QUEUE)
+        private readonly rankBroadcastQueue: Queue
+    ) {
+        super()
     }
-  }
 
-  private async handleUpdateScore(data: { userId: string; score: number }) {
-    const { userId, score } = data;
+    async process(job: Job<any, any, string>): Promise<any> {
+        try {
+            this.logger.log(`Starting to process job ${job.name} with data:`, job.data)
 
-    // Update MongoDB
-    await this.rankModel.findOneAndUpdate(
-      { userId },
-      { score },
-      { upsert: true, new: true }
-    );
+            switch (job.name) {
+                case "updateScore":
+                    this.logger.log(`Processing updateScore job for user ${job.data.userId}`)
+                    await this.handleUpdateScore(job.data)
+                    this.logger.log(`Successfully processed updateScore job for user ${job.data.userId}`)
+                    break
+                default:
+                    this.logger.warn(`Unknown job type: ${job.name}`)
+            }
 
-    // Update Redis sorted set
-    await this.redis.zadd(this.RANK_KEY, score, userId);
+            return {}
+        } catch (error) {
+            this.logger.error(`Job processing failed: ${error.message}`, error.stack)
+            throw error
+        }
+    }
 
-    this.logger.log(`Updated score for user ${userId}: ${score}`);
-  }
+    private async handleUpdateScore(data: {
+        userId: string
+        score: number
+        rankScore: number
+        updateTime: number
+    }) {
+        const { userId, score, rankScore } = data
+        try {
+            this.logger.log(`Starting handleUpdateScore for user ${userId}`)
+            
+            // 更新 MongoDB
+            const updatedRank = await this.rankModel.findOneAndUpdate(
+                { userId },
+                { score },
+                { upsert: true, new: true }
+            )
+            this.logger.log(`MongoDB update successful for user ${userId}`)
+
+            // 更新 Redis
+            await this.redis.zadd(this.RANK_KEY, rankScore, userId)
+            this.logger.log(`Redis rank update successful for user ${userId}`)
+
+            // 发送广播消息
+            await this.rankBroadcastQueue.add("broadcast-game-rank", {
+                userId,
+            })
+            this.logger.log(`Broadcast message sent for user ${userId}`)
+        } catch (error) {
+            this.logger.error(`handleUpdateScore failed for user ${userId}: ${error.message}`, error.stack)
+            throw error
+        }
+    }
 }
