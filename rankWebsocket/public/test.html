@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .panel {
+            flex: 1;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #messageList {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            padding: 10px;
+            margin: 10px 0;
+            background: #f9f9f9;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .message.firstRank {
+            background: #e6ffe6;
+        }
+        .message.overtaken {
+            background: #ffe6e6;
+        }
+        .message.rankUpdate {
+            background: #e6f3ff;
+        }
+        .status {
+            padding: 5px 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+        }
+        .status.connected {
+            background: #e6ffe6;
+            color: #006600;
+        }
+        .status.disconnected {
+            background: #ffe6e6;
+            color: #660000;
+        }
+        button {
+            padding: 8px 15px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        input {
+            padding: 5px;
+            margin: 5px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket 排名消息测试</h1>
+    <div class="container">
+        <div class="panel">
+            <h2>连接设置</h2>
+            <div>
+                <input type="text" id="userId" placeholder="输入用户ID">
+                <button onclick="connect()">连接</button>
+                <button onclick="disconnect()">断开</button>
+            </div>
+            <div id="connectionStatus" class="status disconnected">未连接</div>
+        </div>
+        <div class="panel">
+            <h2>连接信息</h2>
+            <div>重连次数: <span id="reconnectCount">0</span></div>
+            <div>最后一次ping: <span id="lastPing">-</span></div>
+        </div>
+    </div>
+    
+    <h2>消息记录</h2>
+    <div id="messageList"></div>
+
+    <script>
+        let ws = null;
+        let reconnectAttempts = 0;
+        let reconnectInterval = null;
+        const maxReconnectAttempts = 5;
+        let userId = '';
+
+        function connect() {
+            userId = document.getElementById('userId').value.trim();
+            if (!userId) {
+                alert('请输入用户ID');
+                return;
+            }
+            
+            const wsUrl = `ws://localhost:4000?userId=${userId}`;
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('Connected to WebSocket');
+                updateConnectionStatus(true);
+                resetReconnectAttempts();
+            };
+            
+            ws.onclose = () => {
+                console.log('Disconnected from WebSocket');
+                updateConnectionStatus(false);
+                scheduleReconnect();
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                updateConnectionStatus(false);
+            };
+            
+            ws.onmessage = (event) => {
+                handleMessage(event.data);
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                stopReconnecting();
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.textContent = connected ? '已连接' : '未连接';
+            statusElement.className = `status ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        function handleMessage(data) {
+            try {
+                const message = JSON.parse(data);
+                const messageList = document.getElementById('messageList');
+                const messageDiv = document.createElement('div');
+                
+                let messageType = 'rankUpdate';
+                if (message.type === 'firstRank') {
+                    messageType = 'firstRank';
+                } else if (message.type === 'overtaken') {
+                    messageType = 'overtaken';
+                }
+                
+                messageDiv.className = `message ${messageType}`;
+                messageDiv.innerHTML = `
+                    <div><strong>时间:</strong> ${new Date().toLocaleTimeString()}</div>
+                    <div><strong>类型:</strong> ${message.type || '排名更新'}</div>
+                    <div><strong>内容:</strong> ${JSON.stringify(message, null, 2)}</div>
+                `;
+                
+                messageList.insertBefore(messageDiv, messageList.firstChild);
+            } catch (error) {
+                console.error('Error parsing message:', error);
+            }
+        }
+
+        function scheduleReconnect() {
+            if (reconnectAttempts < maxReconnectAttempts) {
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+                reconnectInterval = setTimeout(() => {
+                    reconnectAttempts++;
+                    document.getElementById('reconnectCount').textContent = reconnectAttempts;
+                    connect();
+                }, delay);
+            }
+        }
+
+        function stopReconnecting() {
+            if (reconnectInterval) {
+                clearTimeout(reconnectInterval);
+                reconnectInterval = null;
+            }
+        }
+
+        function resetReconnectAttempts() {
+            reconnectAttempts = 0;
+            document.getElementById('reconnectCount').textContent = reconnectAttempts;
+            stopReconnecting();
+        }
+
+        // 心跳检测
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                document.getElementById('lastPing').textContent = new Date().toLocaleTimeString();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>

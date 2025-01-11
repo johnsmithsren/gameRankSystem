@@ -10,9 +10,14 @@ async function bootstrap() {
     logger: new MyLogger(),
   });
   app.useWebSocketAdapter(new WsAdapter(app));
-  let port = app.get(ConfigService).get("PORT");
+  const configService = app.get(ConfigService);
+  const port = configService.get<number>("PORT");
+
   await app.listen(port, async () => {
+    const serverUrl = await app.getUrl();
     Logger.log(`WebSocket服务已经启动`);
+    Logger.log(`WebSocket监听端口: ${port}`);
+    Logger.log(`WebSocket连接地址: ws://localhost:${port}`);
   });
 }
 bootstrap();
