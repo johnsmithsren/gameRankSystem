@@ -3,7 +3,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RedisModule } from '@songkeys/nestjs-redis';
 import { PushModule } from './push/push.module';
-import { RankModule } from './rank/rank.module';
 
 @Module({
   imports: [
@@ -26,7 +25,7 @@ import { RankModule } from './rank/rank.module';
       }),
     }),
     PushModule,
-    RankModule],
+    ],
   controllers: [],
 
 })

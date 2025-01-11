@@ -7,7 +7,7 @@ import { QueryRankDto } from './dto/query-rank.dto';
 export class RankController {
   constructor(private readonly rankService: RankService) {}
 
-  @Post('update-score')
+  @Post('score')
   async updateScore(@Body() updateScoreDto: UpdateScoreDto) {
     return await this.rankService.updateScore(updateScoreDto);
   }

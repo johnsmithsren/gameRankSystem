@@ -28,10 +28,6 @@ export class AccountService {
         return accountInfoWithPointInfo.pointInfo
     }
 
-    async GetNewPointInfoInDB(account) {
-        let myRank = await this.finalPointModal.findOne({ account }).lean()
-        return myRank
-    }
 
     async IncreaseTotalPoint(account: string, point: number) {
         let currentTimeMS = Date.now()
@@ -58,39 +54,5 @@ export class AccountService {
     }
     //#endregion
 
-    async GetComputingPowerRanking(account: string, page: number, size: number) {
-        let ret: {
-            myRank: number,
-            myComputingPower: number,
-            myAccount: string,
-            itemList: {
-                computingPower: number,
-                account: string
-            }[]
-        } = {
-            myRank: 0,
-            myComputingPower: 0,
-            myAccount: '',
-            itemList: [],
-        }
-        let dataInDB = await this.accountModel.find({ "miningV3.computingPower": { $gt: 0 } }, { account: 1, miningV3: 1 }).sort({ "miningV3.computingPower": -1 }).skip((page - 1) * size).limit(size).lean()
-        for (let item of dataInDB) {
-            ret.itemList.push({
-                account: item.account,
-                computingPower: item.miningV3 ? item.miningV3.computingPower : 0
-            })
-        }
-        let currentAccountInfo = await this.accountModel.findOne({ account }, { account: 1, miningV3: 1 }).lean()
-        let userComputingPower = 0
-        if (currentAccountInfo.miningV3) {
-            userComputingPower = currentAccountInfo.miningV3.computingPower
-        }
-        let myRank = await this.GetComputingPowerRank(userComputingPower)
-        if (myRank) {
-            ret.myRank = myRank || 0
-            ret.myAccount = account
-            ret.myComputingPower = userComputingPower
-        }
-        return ret
-    }
+
 }
