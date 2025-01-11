@@ -1,12 +1,10 @@
 import { Action_Type, RANK_BROADCAST_QUEUE } from "src/utils/constant";
 import { Processor, WorkerHost } from "@nestjs/bullmq";
-import { Job, Queue } from "bullmq";
+import { Job } from "bullmq";
 import { Logger } from "@nestjs/common";
-import { InjectModel } from "@nestjs/mongoose";
 import { InjectRedis } from "@songkeys/nestjs-redis";
 import Redis from "ioredis";
-import { Model } from "mongoose";
-import { AccountDocument } from "src/entities/account.entity";
+
 import { WsGateway } from "src/io/io.gateway";
 
 @Processor(RANK_BROADCAST_QUEUE)
@@ -15,7 +13,6 @@ export class RankProcessor extends WorkerHost {
   private readonly RANK_KEY = "game:rank";
   private readonly SCORE_BITS = 32n;
   constructor(
-    @InjectModel("Account") private accountModel: Model<AccountDocument>,
     private readonly wsGateway: WsGateway,
     @InjectRedis() private readonly redis: Redis
   ) {
@@ -30,6 +27,16 @@ export class RankProcessor extends WorkerHost {
           await this.broadcastRank(job.data);
           this.logger.log(`end process ${job.name} ${userId} job`);
           break;
+        case Action_Type.firstRank:
+          this.logger.log(`start process ${job.name} ${userId} job`);
+          await this.firstRank(job.data);
+          this.logger.log(`end process ${job.name} ${userId} job`);
+          break;
+        case Action_Type.overRank:
+          this.logger.log(`start process ${job.name} ${userId} job`);
+          await this.overRank(job.data);
+          this.logger.log(`end process ${job.name} ${userId} job`);
+          break;
       }
       return {};
     } catch (error) {
@@ -38,14 +45,18 @@ export class RankProcessor extends WorkerHost {
     }
   }
 
-  async broadcastRank(data: { userId: string; score: number }) {
-    const { userId, score } = data;
-    let userRankInfo = await this.getPersonalRank(userId);
-    if (userRankInfo) {
-      this.wsGateway.broadcastRankUpdate(JSON.stringify(userRankInfo));
-    } else {
-      this.logger.log("用户不存在");
-    }
+  async broadcastRank(data: { userId: string; message: string }) {
+    const { message } = data;
+    this.wsGateway.broadcastRankUpdate(message);
+  }
+
+  async firstRank(data: { userId: string; message: string }) {
+    const { userId, message } = data;
+    this.wsGateway.sendMessageToUser(userId, message);
+  }
+  async overRank(data: { userId: string; message: string }) {
+    const { userId, message } = data;
+    this.wsGateway.sendMessageToUser(userId, message);
   }
 
   private getOriginalScore(rankScore: number): number {

@@ -1,4 +1,4 @@
-import { RANK_BROADCAST_QUEUE, RANK_PROCESS_QUEUE } from "src/utils/constant"
+import { Action_Type, RANK_BROADCAST_QUEUE, RANK_PROCESS_QUEUE } from "src/utils/constant"
 import { InjectQueue, Processor, WorkerHost } from "@nestjs/bullmq"
 import { Job, Queue } from "bullmq"
 import { Logger } from "@nestjs/common"
@@ -52,9 +52,57 @@ export class RankProcessor extends WorkerHost {
         const { userId, score, rankScore } = data
         try {
             this.logger.log(`Starting handleUpdateScore for user ${userId}`)
-            
+
+            // 检查是否首次上榜
+            const isFirstRank = !(await this.redis.zscore(this.RANK_KEY, userId))
+            if (isFirstRank) {
+                this.logger.log(`First time ranking for user ${userId}`)
+                await this.rankBroadcastQueue.add(Action_Type.firstRank, {
+                    userId,
+                    message: JSON.stringify({
+                        score,
+                        rank: await this.redis.zrevrank(this.RANK_KEY, userId)
+                    })
+                })
+            }
+
+            // 获取当前排名
+            const currentRank = await this.redis.zrevrank(this.RANK_KEY, userId)
+
+            // 如果不是首次上榜，检查是否超越其他玩家
+            if (!isFirstRank && currentRank !== null) {
+                // 获取即将超越的玩家
+                const potentialOverRankedUsers = await this.redis.zrevrangebyscore(
+                    this.RANK_KEY,
+                    rankScore,
+                    '-inf',
+                    'WITHSCORES',
+                    'LIMIT',
+                    0,
+                    1
+                )
+
+                // 如果有被超越的玩家
+                if (potentialOverRankedUsers.length >= 2) {
+                    const overRankedUserId = potentialOverRankedUsers[0]
+                    const overRankedScore = parseInt(potentialOverRankedUsers[1])
+
+                    if (overRankedUserId !== userId) {
+                        this.logger.log(`User ${userId} surpassed user ${overRankedUserId}`)
+                        await this.rankBroadcastQueue.add(Action_Type.overRank, {
+                            userId: overRankedUserId,  // 被超越的玩家
+                            message: JSON.stringify({
+                                surpassedByUserId: userId, // 超越的玩家
+                                oldScore: overRankedScore,
+                                newScore: score
+                            })
+                        })
+                    }
+                }
+            }
+
             // 更新 MongoDB
-            const updatedRank = await this.rankModel.findOneAndUpdate(
+            await this.rankModel.findOneAndUpdate(
                 { userId },
                 { score },
                 { upsert: true, new: true }
@@ -66,8 +114,10 @@ export class RankProcessor extends WorkerHost {
             this.logger.log(`Redis rank update successful for user ${userId}`)
 
             // 发送广播消息
-            await this.rankBroadcastQueue.add("broadcast-game-rank", {
+            await this.rankBroadcastQueue.add(Action_Type.broadcastRank, {
                 userId,
+                score,
+                rank: await this.redis.zrevrank(this.RANK_KEY, userId)
             })
             this.logger.log(`Broadcast message sent for user ${userId}`)
         } catch (error) {
