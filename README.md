@@ -54,11 +54,6 @@
 
 1. 通过消息队列削峰，避免并发处理导致数据库压力过大
 
-### 系统扩展
-
-- PM2 集群部署支持
-- redis 集群部署支持
-
 ### 功能增强
 
 - 完善的用户鉴权系统
@@ -69,3 +64,22 @@
 - 请求频率的限制
 - 添加缓存预热机制
 - 添加报错监控，发送消息处理失败信息企业微信等消息平台
+- 通过构建 Gateway 服务，来对 websocket 服务进行负载均衡
+- PM2 集群部署支持
+- redis 集群部署支持
+
+### 部署方式
+
+这两个都是 nestjs 应用
+分别打包，部署都服务器上，然后在服务器上手动创建.env 文件
+
+.env 文件格式
+
+```
+MONGOURL='mongodb://xxxx@xxx/gameRank?authSource=admin'
+REDIS_HOST='xxxx'
+REDIS_PORT='6380'
+REDIS_PASSWORD="xxx"
+REDIS_DB="xxx"
+PORT=4000
+```
