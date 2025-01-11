@@ -18,15 +18,7 @@ lerna-debug.log*
 /coverage
 /.nyc_output
 
-# IDEs and editors
-/.idea
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
 
-rankSystem/.env
-rankWebsocket/.env
 **/node_modules
+**/dist
+**/.env
